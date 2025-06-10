@@ -72,7 +72,7 @@ def get_summary_metrics(models, x_train_res, y_train_res, x_test, y_test, method
     return pd.DataFrame(records)
 
 # --- Tampilan Utama ---
-st.header("1. Unggah Dataset")
+st.header("Unggah Dataset")
 uploaded_file = st.file_uploader("Pilih file CSV", type="csv")
 
 if uploaded_file is not None:
