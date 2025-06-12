@@ -9,5 +9,5 @@ Why is this repository public? I just did it because I felt like it.
 
 The dataset I used in this notebook is 
 
-https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
-https://www.kaggle.com/datasets/kartik2112/fraud-detection/data
+- https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
+- https://www.kaggle.com/datasets/kartik2112/fraud-detection/data
