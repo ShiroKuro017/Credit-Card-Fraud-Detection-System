@@ -1,184 +1,196 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, cross_val_score
-from sklearn.metrics import roc_auc_score, f1_score, confusion_matrix, RocCurveDisplay
+import lightgbm as lgb
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 from imblearn.over_sampling import SMOTE
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+import os
 import io
 
-# --- Pengaturan Halaman Utama ---
-st.set_page_config(page_title="System Deteksi Penipuan Kartu Kredit", layout="wide")
-st.title("System Deteksi Penipuan Kartu Kredit (Credit Card Fraud)")
-st.markdown("---")
+# --- Konfigurasi Halaman Streamlit ---
+st.set_page_config(
+    page_title="Deteksi Penipuan Kartu Kredit",
+    page_icon="💳",
+    layout="wide"
+)
 
+# Inisialisasi session state di awal untuk menyimpan status dan data
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+if 'df' not in st.session_state:
+    st.session_state.df = None
 
-# Fungsi untuk mendapatkan metrik ringkasan
-def get_summary_metrics(models, x_train_res, y_train_res, x_test, y_test, method_name):
-    records = []
-    
-    st.subheader(f"Hasil Evaluasi untuk Fitur dari {method_name}")
-    
-    for idx, (name, clf) in enumerate(models, start=1):
-        with st.expander(f"Hasil untuk Model: **{name}**"):
-            
-            with st.spinner(f"Melatih dan mengevaluasi {name} pada fitur {method_name}..."):
-                clf.fit(x_train_res, y_train_res)
-                cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
-                cv_score = cross_val_score(clf, x_train_res, y_train_res, cv=cv, scoring='roc_auc').mean()
-                
-                y_pred = clf.predict(x_test)
-                y_pred_proba = clf.predict_proba(x_test)[:,1]
-                roc_auc = roc_auc_score(y_test, y_pred_proba)
-                f1 = f1_score(y_test, y_pred)
-                
-                # Menampilkan metrik
-                st.write(f"**Cross Validation ROC AUC:** `{cv_score:.2%}`")
-                st.write(f"**Test ROC AUC:** `{roc_auc:.2%}`")
-                st.write(f"**F1 Score (Fraud):** `{f1:.2%}`")
+# --- Judul Aplikasi ---
+st.title("Aplikasi Deteksi Penipuan Kartu Kredit 💳")
+st.write("Aplikasi ini menggunakan model Machine Learning (LightGBM) untuk mendeteksi transaksi kartu kredit yang berpotensi penipuan.")
 
-                # Menampilkan plot
-                fig, axes = plt.subplots(1, 2, figsize=(20, 8)) # Ukuran gambar bisa disesuaikan
-                
-                # Confusion Matrix
-                cm = confusion_matrix(y_test, y_pred)
-                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axes[0], 
-                            xticklabels=['Normal', 'Fraud'], yticklabels=['Normal', 'Fraud'])
-                axes[0].set_title('Confusion Matrix', fontsize=20)
-                
-                # ROC Curve
-                RocCurveDisplay.from_estimator(clf, x_test, y_test, ax=axes[1])
-                axes[1].set_title('Kurva ROC', fontsize=20)
+# --- Fungsi Cache untuk Pra-pemrosesan ---
+@st.cache_data
+def preprocess_data(df):
+    try:
+        cols_to_drop = ['Unnamed: 0', 'cc_num', 'first', 'last', 'street', 'city', 'state', 'zip', 'dob', 'trans_num', 'trans_date_trans_time']
+        existing_cols_to_drop = [col for col in cols_to_drop if col in df.columns]
+        df.drop(columns=existing_cols_to_drop, inplace=True)
+        
+        categorical_features = ["merchant", "category", "gender", "job"]
+        for feature in categorical_features:
+            if feature in df.columns:
+                encoder = LabelEncoder()
+                df[feature] = encoder.fit_transform(df[feature])
+        
+        return df
+    except Exception as e:
+        st.error(f"Terjadi kesalahan saat memproses data: {e}")
+        return None
 
-                st.pyplot(fig)
+# --- SIDEBAR & LOGIKA PEMUATAN DATA ---
+st.sidebar.header("Pengaturan Data")
+file_path = 'fraudTrain.csv'
 
-                records.append({
-                    "No.": idx,
-                    "ML Algorithm": name,
-                    "Cross Validation ROC AUC": f"{cv_score:.2%}",
-                    "Test ROC AUC": f"{roc_auc:.2%}",
-                    "F1 Score (Fraud)": f"{f1:.2%}"
-                })
+if os.path.exists(file_path):
+    st.sidebar.success(f"✅ File '{file_path}' ditemukan.")
+    if st.sidebar.button("Muat & Proses Data Lokal", key="load_local"):
+        with st.spinner("Memuat dan memproses data..."):
+            df_raw = pd.read_csv(file_path)
+            st.session_state.df = preprocess_data(df_raw)
+            st.session_state.data_loaded = True
+            st.rerun()
 
-    return pd.DataFrame(records)
-
-# --- Tampilan Utama ---
-st.header("Unggah Dataset")
-uploaded_file = st.file_uploader("Pilih file CSV", type="csv")
+st.sidebar.markdown("---")
+uploaded_file = st.sidebar.file_uploader(
+    f"Jika '{file_path}' tidak ada, unggah data Anda (.csv)",
+    type=["csv"]
+)
 
 if uploaded_file is not None:
-    data = pd.read_csv(uploaded_file)
-    st.success("Dataset berhasil diunggah!")
-    st.write("Beberapa baris pertama dari dataset:")
-    st.dataframe(data.head())
+    with st.spinner("Memuat dan memproses data yang diunggah..."):
+        df_raw = pd.read_csv(uploaded_file)
+        st.session_state.df = preprocess_data(df_raw)
+        st.session_state.data_loaded = True
+        st.rerun()
+
+if st.session_state.data_loaded and st.session_state.df is not None:
+    
+    df = st.session_state.df
+    
+    features_anova = ['amt', 'category', 'gender', 'unix_time', 'city_pop', 'lat', 'merch_lat', 'merch_long', 'long', 'merchant', 'job']
+    target_variable = 'is_fraud'
+    
+    existing_features = [f for f in features_anova if f in df.columns]
+    missing_features = [f for f in features_anova if f not in df.columns]
+
+    if target_variable not in df.columns or not existing_features:
+         st.error(f"Dataset tidak valid. Kolom target '{target_variable}' atau kolom fitur tidak ditemukan.")
+    else:
+        if missing_features:
+            st.warning(f"Fitur berikut tidak ditemukan dan akan diabaikan: {missing_features}")
+
+        X = df[existing_features]
+        y = df[target_variable]
+
+        tab1, tab2, tab3 = st.tabs(["📊 Ringkasan Data", "⚙️ Pelatihan & Evaluasi Model", "🔍 Hasil Deteksi"])
+
+        with tab1:
+            st.header("Ringkasan Dataset")
+            st.dataframe(df.head())
             
-    if st.button("Mulai Proses Analisis Lengkap", use_container_width=True, type="primary"):
-        # === PERSIAPAN DATA ===
-        st.header("1. Persiapan Data")
-        st.write("**Isi Dataset:**")
-        st.dataframe(data.describe())
-        
-        st.write("**Informasi Dataset:**")
-        buffer = io.StringIO()
-        data.info(buf=buffer)
-        s = buffer.getvalue()
-        st.text(s)
+            st.subheader("Distribusi Kelas Target (is_fraud)")
+            fraud_dist = y.value_counts()
+            st.bar_chart(fraud_dist)
+            st.write(f"Jumlah Transaksi Sah: **{fraud_dist.get(0, 0)}**")
+            st.write(f"Jumlah Transaksi Penipuan: **{fraud_dist.get(1, 0)}**")
 
-        # === VISUALISASI DATA ===
-        st.header("2. Visualisasi Distribusi Kelas")
-        fraud_count = data['Class'].value_counts()
-        
-        fig_dist, axes_dist = plt.subplots(1, 2, figsize=(10, 10))
-        
-        # Pie Chart
-        axes_dist[0].pie(fraud_count, labels=['Normal', 'Fraud'], autopct='%1.2f%%', startangle=90)
-        axes_dist[0].set_title('Persentase: Fraud vs. No Fraud', fontsize=20)
-        
-        # Count Plot
-        sns.countplot(x='Class', data=data, ax=axes_dist[1], palette="pastel")
-        axes_dist[1].set_title('Jumlah Kasus Fraud (Penipuan)', fontsize=20)
-        axes_dist[1].set_xticklabels(['Normal (0)', 'Fraud (1)'])
-        
-        st.pyplot(fig_dist)
-        st.markdown("---")
+        with tab2:
+            st.header("Pelatihan Model Deteksi Penipuan")
+            st.info("Klik tombol di bawah untuk memulai proses pelatihan. Proses ini mungkin memakan waktu beberapa menit.")
 
-        # === OUTLINE BAGIAN 3: PEMILIHAN FITUR (Tidak ditampilkan, hanya proses) ===
-        
-        # === OUTLINE BAGIAN 4 & 5: PEMODELAN & EVALUASI ===
-        st.header("3. Evaluasi Model")
-        
-        # Model 1: Fitur dari Analisis Plot Korelasi
-        model1_data = data[['V3','V4','V7','V10','V11','V12','V14','V16','V17','Class']].copy()
-        X1 = model1_data.drop('Class', axis=1)
-        y1 = model1_data['Class']
-        x_train1, x_test1, y_train1, y_test1 = train_test_split(X1, y1, test_size=0.20, random_state=2, stratify=y1)
-        
-        # Model 2: Seleksi Fitur dari Skor ANOVA
-        X_full = data.loc[:, :'Amount']
-        y_full = data.loc[:, 'Class']
-        featurescore = pd.DataFrame(data=SelectKBest(score_func=f_classif, k='all').fit(X_full, y_full).scores_, index=X_full.columns, columns=["ANOVA Score"]).sort_values(by="ANOVA Score", ascending=False)
-        model2_data = data.drop(columns=list(featurescore.index[20:]))
-        X2 = model2_data.drop('Class', axis=1)
-        y2 = model2_data['Class']
-        x_train2, x_test2, y_train2, y_test2 = train_test_split(X2, y2, test_size=0.20, random_state=2, stratify=y2)
-        
-        # Pipeline Balancer
-        pipeline_balancer = Pipeline(steps=[('u', RandomUnderSampler(sampling_strategy=0.1, random_state=42)),
-                                            ('o', SMOTE(sampling_strategy=0.5, random_state=42))])
-        
-        x_train1_res, y_train1_res = pipeline_balancer.fit_resample(x_train1, y_train1)
-        x_train2_res, y_train2_res = pipeline_balancer.fit_resample(x_train2, y_train2)
-        
-        models = [
-            ("Logistic Regression", LogisticRegression(random_state=0, C=10, penalty='l2', max_iter=1000)),
-            ("K-Nearest Neighbors", KNeighborsClassifier(leaf_size=1, n_neighbors=3, p=1)),
-            ("Support Vector Classifier", SVC(kernel='linear', C=0.1, probability=True, random_state=42)),
-            ("Decision Tree Classifier", DecisionTreeClassifier(random_state=1000, max_depth=4, min_samples_leaf=1)),
-            ("Random Forest Classifier", RandomForestClassifier(max_depth=4, random_state=0))
-        ]
+            if st.button("🚀 Mulai Pelatihan dan Evaluasi"):
+                with st.spinner("Mohon tunggu, proses pelatihan sedang berjalan..."):
+                    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=2, stratify=y)
+                    
+                    over = SMOTE(sampling_strategy=0.5, random_state=42)
+                    under = RandomUnderSampler(sampling_strategy=0.1, random_state=42)
+                    pipeline = Pipeline(steps=[('u', under), ('o', over)])
+                    x_train_res, y_train_res = pipeline.fit_resample(x_train, y_train)
+                    
+                    lgbm_clf = lgb.LGBMClassifier(random_state=42)
+                    lgbm_clf.fit(x_train_res, y_train_res)
+                    
+                    predictions = lgbm_clf.predict(x_test)
+                    
+                    st.session_state['model'] = lgbm_clf
+                    st.session_state['x_test'] = x_test
+                    st.session_state['y_test'] = y_test
+                    st.session_state['predictions'] = predictions
+                    st.session_state['model_trained'] = True
 
-        # Menjalankan evaluasi untuk kedua metode dan menampilkan hasilnya
-        results_corr = get_summary_metrics(models, x_train1_res, y_train1_res, x_test1, y_test1, "Plot Korelasi")
-        results_anova = get_summary_metrics(models, x_train2_res, y_train2_res, x_test2, y_test2, "Skor ANOVA")
-        
-        st.markdown("---")
+                st.success("✅ Model berhasil dilatih dan dievaluasi!")
+                
+                st.subheader("Laporan Klasifikasi")
+                report = classification_report(y_test, predictions, target_names=['Bukan Penipuan', 'Penipuan'], output_dict=True)
+                st.dataframe(pd.DataFrame(report).transpose())
 
-        # === OUTLINE BAGIAN 6: RANGKUMAN DAN KESIMPULAN ===
-        st.header("4. Rangkuman Hasil & Kesimpulan")
-        st.subheader("Tabel Rangkuman Hasil Akhir")
-        st.write("**Hasil Metode Fitur Korelasi**")
-        st.dataframe(results_corr)
-        st.write("**Hasil Metode Fitur ANOVA**")
-        st.dataframe(results_anova)
-        
-        # Gabungkan untuk kesimpulan
-        results_corr['Metode Fitur'] = 'Plot Korelasi'
-        results_anova['Metode Fitur'] = 'Skor ANOVA'
-        all_results = pd.concat([results_corr, results_anova], ignore_index=True)
-        all_results['F1_Score_Num'] = all_results['F1 Score (Fraud)'].str.replace('%','').astype(float)
-        
-        best_overall = all_results.loc[all_results['F1_Score_Num'].idxmax()]
-        
-        st.subheader("Kesimpulan")
-        st.code(
-            f'{"="*25} KESIMPULAN {"="*25}\n\n'
-            f"Berdasarkan evaluasi komparatif dari metrik F1-Score, model dengan kinerja terbaik adalah '{best_overall['ML Algorithm']}'.\n"
-            f"Performa optimal ini dicapai saat model dilatih menggunakan set fitur dari '{best_overall['Metode Fitur']}'.\n"
-            f"Model tersebut berhasil mencapai F1-Score sebesar {best_overall['F1 Score (Fraud)']} untuk mendeteksi kasus penipuan (fraud).\n\n"
-            f"Analisis:\n"
-            f"F1-Score menjadi metrik acuan utama karena mampu memberikan penilaian yang seimbang antara Precision dan Recall.\n"
-            f"Dalam konteks deteksi penipuan, hal ini sangat krusial. Nilai F1-Score yang tinggi pada model '{best_overall['ML Algorithm']}'\n"
-            f"mengindikasikan bahwa model tersebut tidak hanya efektif dalam memaksimalkan deteksi kasus penipuan (recall tinggi),\n"
-            f"tetapi juga mampu meminimalkan jumlah transaksi sah yang keliru diklasifikasikan sebagai penipuan (precision tinggi).\n"
-            f'{"="*62}',
-            language=None
-        )
+                st.subheader("Confusion Matrix")
+                cm = confusion_matrix(y_test, predictions)
+                fig, ax = plt.subplots()
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                            xticklabels=['Bukan Penipuan', 'Penipuan'], 
+                            yticklabels=['Bukan Penipuan', 'Penipuan'],
+                            ax=ax)
+                plt.title('Confusion Matrix Hasil Deteksi')
+                plt.xlabel('Prediksi')
+                plt.ylabel('Aktual')
+                st.pyplot(fig)
+
+        with tab3:
+            st.header("Hasil Deteksi pada Data Uji")
+            if 'model_trained' not in st.session_state or not st.session_state.get('model_trained', False):
+                st.warning("⚠️ Harap latih model terlebih dahulu di tab 'Pelatihan & Evaluasi Model'.")
+            else:
+                x_test = st.session_state['x_test']
+                y_test = st.session_state['y_test']
+                predictions = st.session_state['predictions']
+                
+                detection_results = pd.DataFrame({
+                    'Data Asli (Indeks)': x_test.index,
+                    'Jumlah Transaksi ($)': x_test['amt'],
+                    'Status Aktual': y_test,
+                    'Status Prediksi': predictions
+                }).reset_index(drop=True)
+
+                detection_results['Hasil Deteksi'] = np.where(detection_results['Status Aktual'] == detection_results['Status Prediksi'], 'Benar ✅', 'Salah ❌')
+                detection_results.replace({'Status Aktual': {0: 'Bukan Fraud', 1: 'Fraud'}, 'Status Prediksi': {0: 'Bukan Fraud', 1: 'Fraud'}}, inplace=True)
+                
+                filter_option = st.selectbox(
+                    "Tampilkan contoh untuk:",
+                    ('Semua Hasil', 'Deteksi Fraud (Aktual)', 'Deteksi Bukan Fraud (Aktual)', 'Prediksi Salah')
+                )
+
+                if filter_option == 'Deteksi Fraud (Aktual)':
+                    st.subheader("Contoh Transaksi yang Sebenarnya adalah Penipuan")
+                    filtered_df = detection_results[detection_results['Status Aktual'] == 'Fraud']
+                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
+                elif filter_option == 'Deteksi Bukan Fraud (Aktual)':
+                    st.subheader("Contoh Transaksi yang Sebenarnya Bukan Penipuan")
+                    filtered_df = detection_results[detection_results['Status Aktual'] == 'Bukan Fraud']
+                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
+                elif filter_option == 'Prediksi Salah':
+                    st.subheader("Contoh di Mana Prediksi Model Salah")
+                    filtered_df = detection_results[detection_results['Hasil Deteksi'] == 'Salah ❌']
+                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
+                else:
+                    # DIUBAH: Batasi tampilan untuk "Semua Hasil" agar tidak crash
+                    st.subheader("Seluruh Hasil Deteksi pada Data Uji")
+                    st.info(f"Menampilkan 1.000 baris pertama dari total {len(detection_results)} baris untuk menjaga performa aplikasi.")
+                    
+                    preview_df = detection_results.head(1000)
+                    st.dataframe(preview_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
+
+else:
+    st.info("Silakan muat dan proses data melalui panel di sebelah kiri untuk memulai.")

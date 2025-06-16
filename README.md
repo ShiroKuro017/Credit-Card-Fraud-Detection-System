@@ -10,4 +10,15 @@ Why is this repository public? I just did it because I felt like it.
 The dataset I used in this notebook is 
 
 - https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud
-- https://www.kaggle.com/datasets/kartik2112/fraud-detection/data
+- https://www.kaggle.com/datasets/kartik2112/fraud-detection/data (MAIN DATASETS)
+
+
+## Running the streamlit app 
+---
+If you want to run `app.py` (streamlit app) you must have a dataset and `app.py` in the same folder 
+
+>proyek-deteksi-fraud/
+>│
+>├── 📄 app.py              <-- File aplikasi Streamlit
+>│
+>└── 📄 fraudTrain.csv      <-- File dataset
