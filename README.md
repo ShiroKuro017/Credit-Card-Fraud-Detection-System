@@ -14,7 +14,6 @@ The dataset I used in this notebook is
 
 
 ## Running the streamlit app 
----
 If you want to run `app.py` (streamlit app) you must have a dataset and `app.py` in the same folder 
 
 ```
