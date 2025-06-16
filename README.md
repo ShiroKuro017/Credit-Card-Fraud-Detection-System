@@ -17,8 +17,8 @@ The dataset I used in this notebook is
 ---
 If you want to run `app.py` (streamlit app) you must have a dataset and `app.py` in the same folder 
 
->proyek-deteksi-fraud/
->│
->├── 📄 app.py              <-- File aplikasi Streamlit
->│
->└── 📄 fraudTrain.csv      <-- File dataset
+proyek-deteksi-fraud/
+│
+├── 📄 app.py              <-- File aplikasi Streamlit
+│
+└── 📄 fraudTrain.csv      <-- File dataset
