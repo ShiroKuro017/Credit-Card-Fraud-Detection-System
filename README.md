@@ -12,12 +12,17 @@ The dataset I used in this notebook is
 - https://www.kaggle.com/datasets/kartik2112/fraud-detection/data (MAIN DATASETS)
 
 
-## Running the streamlit app 
-If you want to run `app.py` (streamlit app) you must have a dataset and `app.py` in the same folder 
-
-```
+## Launch the Streamlit app.
+To run the Streamlit app (`app.py`), you must have both a dataset and the app in the same folder.  
+```example layout folder 
 proyek-deteksi-fraud/
 │
 ├── 📄 app.py # File skrip utama aplikasi Streamlit
 │
 └── 📄 fraudTrain.csv # File dataset yang akan dibaca oleh aplikasi
+```
+### Run the Streamlit application.
+Open a terminal or command prompt and navigate to the directory where you saved the app.py and fraudTrain.csv files. Then, run the following command:
+```
+streamlit run app.py
+```  
