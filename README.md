@@ -19,6 +19,6 @@ If you want to run `app.py` (streamlit app) you must have a dataset and `app.py`
 
 proyek-deteksi-fraud/
 │
-├── 📄 app.py              <-- File aplikasi Streamlit
+├── 📄 app.py          # File utama aplikasi Streamlit
 │
-└── 📄 fraudTrain.csv      <-- File dataset
+└── 📄 fraudTrain.csv  # File dataset yang digunakan
