@@ -68,7 +68,7 @@ uploaded_file = st.sidebar.file_uploader(
     type=["csv"]
 )
 
-if uploaded_file is not None:
+if uploaded_file is not None and not st.session_state.get('data_loaded', False):
     with st.spinner("Memuat dan memproses data yang diunggah..."):
         df_raw = pd.read_csv(uploaded_file)
         st.session_state.df = preprocess_data(df_raw)
@@ -171,26 +171,31 @@ if st.session_state.data_loaded and st.session_state.df is not None:
                     "Tampilkan contoh untuk:",
                     ('Semua Hasil', 'Deteksi Fraud (Aktual)', 'Deteksi Bukan Fraud (Aktual)', 'Prediksi Salah')
                 )
-
+                filtered_df = pd.DataFrame()
+                
+                # 2. Filter data berdasarkan pilihan, tapi JANGAN tampilkan dulu
                 if filter_option == 'Deteksi Fraud (Aktual)':
                     st.subheader("Contoh Transaksi yang Sebenarnya adalah Penipuan")
                     filtered_df = detection_results[detection_results['Status Aktual'] == 'Fraud']
-                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
                 elif filter_option == 'Deteksi Bukan Fraud (Aktual)':
                     st.subheader("Contoh Transaksi yang Sebenarnya Bukan Penipuan")
                     filtered_df = detection_results[detection_results['Status Aktual'] == 'Bukan Fraud']
-                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
                 elif filter_option == 'Prediksi Salah':
                     st.subheader("Contoh di Mana Prediksi Model Salah")
                     filtered_df = detection_results[detection_results['Hasil Deteksi'] == 'Salah ❌']
-                    st.dataframe(filtered_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
-                else:
-                    # DIUBAH: Batasi tampilan untuk "Semua Hasil" agar tidak crash
+                else: # 'Semua Hasil'
                     st.subheader("Seluruh Hasil Deteksi pada Data Uji")
-                    st.info(f"Menampilkan 1.000 baris pertama dari total {len(detection_results)} baris untuk menjaga performa aplikasi.")
-                    
-                    preview_df = detection_results.head(1000)
-                    st.dataframe(preview_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
+                    filtered_df = detection_results
+
+                # 3. Cek ukuran DataFrame yang sudah difilter, batasi jika perlu
+                if len(filtered_df) > 1000:
+                    st.info(f"Menampilkan 1.000 baris pertama dari total {len(filtered_df)} baris untuk menjaga performa aplikasi.")
+                    display_df = filtered_df.head(1000)
+                else:
+                    display_df = filtered_df
+                
+                # 4. Tampilkan DataFrame yang ukurannya sudah aman dengan format
+                st.dataframe(display_df.style.format({'Jumlah Transaksi ($)': '${:,.2f}'}))
 
 else:
     st.info("Silakan muat dan proses data melalui panel di sebelah kiri untuk memulai.")
