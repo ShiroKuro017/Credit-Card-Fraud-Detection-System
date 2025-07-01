@@ -6,3 +6,5 @@ matplotlib
 seaborn
 joblib
 lightgbm 
+imblearn.over_sampling
+EasyEnsembleClassifier
