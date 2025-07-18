@@ -1,5 +1,5 @@
 # System Deteksi Penipuan Kartu Kredit
-System Deteksi Penipuan Kartu Kredit (Credit Card Fraud) dengan imbalance dataset
+System Deteksi Penipuan Kartu Kredit (Credit Card Fraud)
 
 # This repo is for a backup homework assignment for my master's degree 
 
